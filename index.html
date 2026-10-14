@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f7f8fa">
+  <meta name="description" content="A private shared baby tracker for your family.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>Little Log — Shared Baby Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div><div class="eyebrow">YOUR FAMILY'S BABY LOG</div><h1>Little Log</h1></div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+  </header>
+  <main>
+    <section class="status-card" aria-live="polite">
+      <div><span class="status-dot" id="statusDot"></span><strong id="syncTitle">Not connected</strong><p id="syncDetail">Set up Google Drive to share records between phones.</p></div>
+      <button id="connectBtn" class="primary small">Connect Drive</button>
+    </section>
+
+    <section class="hero-row">
+      <div><div class="eyebrow" id="todayLabel">TODAY</div><h2 id="todayDate">Baby's day</h2><p id="daySummary">Connect Drive to load shared activity.</p></div>
+      <button id="syncBtn" class="secondary" title="Sync now">↻ Sync</button>
+    </section>
+
+    <section class="quick-grid" aria-label="Log an activity">
+      <button class="quick" data-type="feeding"><span class="emoji">🍼</span><strong>Feeding</strong><small>Breast, bottle, pump</small></button>
+      <button class="quick" data-type="sleep"><span class="emoji">🌙</span><strong>Sleep</strong><small>Nap or night sleep</small></button>
+      <button class="quick" data-type="diaper"><span class="emoji">🧷</span><strong>Diaper</strong><small>Wet, dirty, both</small></button>
+      <button class="quick" data-type="solids"><span class="emoji">🥣</span><strong>Solids</strong><small>Food and amount</small></button>
+      <button class="quick" data-type="pumping"><span class="emoji">💧</span><strong>Pumping</strong><small>Duration and volume</small></button>
+      <button class="quick" data-type="health"><span class="emoji">🩺</span><strong>Health</strong><small>Medicine, temperature</small></button>
+      <button class="quick" data-type="growth"><span class="emoji">📏</span><strong>Growth</strong><small>Weight and length</small></button>
+      <button class="quick" data-type="milestone"><span class="emoji">⭐</span><strong>Milestone</strong><small>Firsts and development</small></button>
+      <button class="quick" data-type="tummy"><span class="emoji">🐣</span><strong>Tummy time</strong><small>Practice and play</small></button>
+      <button class="quick" data-type="note"><span class="emoji">📝</span><strong>Note / routine</strong><small>Bath, appointment, etc.</small></button>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">SHARED HISTORY</div><h2>Recent activity</h2></div><button id="exportBtn" class="text-btn">Export JSON</button></div>
+      <div id="timeline" class="timeline"><div class="empty">Your shared activity will appear here once Drive is connected.</div></div>
+    </section>
+
+    <section class="panel compact-panel">
+      <div class="section-head"><div><div class="eyebrow">QUICK STATS</div><h2>Today so far</h2></div></div>
+      <div class="stats-grid" id="stats"><div><strong>—</strong><span>Feeds</span></div><div><strong>—</strong><span>Sleep</span></div><div><strong>—</strong><span>Diapers</span></div><div><strong>—</strong><span>Pumping</span></div></div>
+    </section>
+    <p class="footnote">Private family tool, not medical advice. Keep routine safe-sleep guidance and your clinician's advice in mind.</p>
+  </main>
+
+  <dialog id="eventDialog">
+    <form id="eventForm" method="dialog">
+      <div class="dialog-head"><div><div class="eyebrow">ADD TO BABY'S LOG</div><h2 id="eventTitle">New activity</h2></div><button type="button" class="icon-btn" data-close="eventDialog" aria-label="Close">✕</button></div>
+      <input type="hidden" id="eventId">
+      <label>Activity type<select id="eventType" required><option value="feeding">Feeding</option><option value="sleep">Sleep</option><option value="diaper">Diaper</option><option value="solids">Solids</option><option value="pumping">Pumping</option><option value="health">Health / medication / vaccine</option><option value="growth">Growth measurement</option><option value="milestone">Milestone</option><option value="tummy">Tummy time / play</option><option value="note">Note / routine / appointment</option></select></label>
+      <div class="two-col"><label>Start / time<input id="eventStart" type="datetime-local" required></label><label>End (optional)<input id="eventEnd" type="datetime-local"></label></div>
+      <label>Details / subtype<input id="eventSubtype" placeholder="e.g. breastfeeding, left side, wet + dirty"></label>
+      <div class="two-col"><label>Amount / value<input id="eventAmount" placeholder="e.g. 90 ml, 4.2 kg"></label><label>Unit<input id="eventUnit" placeholder="ml, kg, cm, °C…"></label></div>
+      <label>Notes<textarea id="eventNotes" rows="3" placeholder="Anything to remember…"></textarea></label>
+      <div class="two-col"><label>Recorded by<input id="eventCaregiver" placeholder="Parent 1 / Parent 2"></label><label>Timer duration (minutes)<input id="eventDuration" type="number" min="0" step="1" placeholder="Optional"></label></div>
+      <div class="form-actions"><button type="button" class="secondary" data-close="eventDialog">Cancel</button><button class="primary" type="submit">Save activity</button></div>
+      <p class="hint">The entry is saved locally first and uploaded to Drive when connected. Keep the app open until the sync status confirms upload.</p>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" method="dialog">
+      <div class="dialog-head"><div><div class="eyebrow">ONE-TIME SETUP</div><h2>Google Drive settings</h2></div><button type="button" class="icon-btn" data-close="settingsDialog" aria-label="Close">✕</button></div>
+      <p class="hint">You need a Google OAuth Web client ID. See SETUP.md in the downloaded project. Both phones must use the same deployed app URL and the same shared Drive folder.</p>
+      <label>Google OAuth Client ID<input id="clientIdInput" placeholder="123...apps.googleusercontent.com" autocomplete="off"></label>
+      <label>Shared Drive folder name<input id="folderNameInput" value="Little Log Baby Data" required></label>
+      <label>Your name (shown on new entries)<input id="caregiverInput" placeholder="e.g. Dad"></label>
+      <div class="form-actions"><button type="button" class="secondary" data-close="settingsDialog">Cancel</button><button class="primary" type="submit">Save settings</button></div>
+      <hr>
+      <div class="setting-actions"><button type="button" id="createFolderBtn" class="secondary">Find / create shared folder</button><button type="button" id="shareHelpBtn" class="text-btn">How to share</button></div>
+      <p class="hint" id="settingsMessage">Drive folder status will appear here.</p>
+      <p class="warning">Privacy: this browser app requests Google Drive access. Only deploy it to a URL you control, never share your OAuth client secret (this app does not use one), and share the data folder only with people you trust.</p>
+    </form>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
