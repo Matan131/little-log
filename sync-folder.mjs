@@ -1,0 +1,78 @@
+export function getRequestedFolderName(settings = {}, defaults = {}) {
+  const requested = (settings.folderName ?? defaults.folderName ?? '').trim();
+  return requested || (defaults.folderName || 'Little Log Baby Data');
+}
+
+export function normalizeFolderName(value = '') {
+  return String(value).trim().toLowerCase();
+}
+
+export function hasFolderNameMismatch({ settings = {}, defaults = {}, syncMeta = {} } = {}) {
+  const storedFolderId = syncMeta?.folderId;
+  if (!storedFolderId) return false;
+
+  const storedFolderName = normalizeFolderName(syncMeta.folderName || '');
+  if (!storedFolderName) return false;
+
+  return storedFolderName !== normalizeFolderName(getRequestedFolderName(settings, defaults));
+}
+
+export function shouldReuseStoredFolderId({ settings = {}, defaults = {}, syncMeta = {} } = {}) {
+  const storedFolderId = syncMeta?.folderId;
+  if (!storedFolderId) return false;
+
+  return !hasFolderNameMismatch({ settings, defaults, syncMeta });
+}
+
+export function getLastFeed(events = []) {
+  return [...events]
+    .filter((event) => event?.type === 'feeding' && !event?.deleted)
+    .sort((a, b) => new Date(b.start) - new Date(a.start))[0] || null;
+}
+
+export function getLast24WetDiapers(events = []) {
+  return [...events].filter((event) => event?.type === 'diaper' && !event?.deleted && event.start).filter((event) => {
+    const time = new Date(event.start).getTime();
+    return Number.isFinite(time) && Date.now() - time <= 24 * 60 * 60 * 1000;
+  }).filter((event) => /wet/i.test(String(event.subtype || ''))).length;
+}
+
+export function getRecommendedNextSide(events = []) {
+  const latest = getLastFeed(events);
+  if (!latest) return null;
+  const left = Number(latest.leftSeconds || 0);
+  const right = Number(latest.rightSeconds || 0);
+  if (!latest.leftSeconds && !latest.rightSeconds) return null;
+  if (left === right) return 'left';
+  return left > right ? 'right' : 'left';
+}
+
+export function buildMainScreenSummary(events = []) {
+  const latest = getLastFeed(events);
+  if (!latest) return 'No feeding logged yet';
+
+  const diffMinutes = Math.max(0, Math.round((Date.now() - new Date(latest.start).getTime()) / 60000));
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+  const timeSince = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+
+  const nextSide = getRecommendedNextSide(events);
+  const sideText = nextSide ? `${nextSide} side next` : 'No side guidance';
+  const wetCount = getLast24WetDiapers(events);
+  return `${timeSince} since last feed • ${sideText} • ${wetCount} wet in 24h`;
+}
+
+export const LittleLogFolderSelection = {
+  getRequestedFolderName,
+  normalizeFolderName,
+  hasFolderNameMismatch,
+  shouldReuseStoredFolderId,
+  getLastFeed,
+  getLast24WetDiapers,
+  getRecommendedNextSide,
+  buildMainScreenSummary,
+};
+
+if (typeof window !== 'undefined') {
+  window.LittleLogFolderSelection = LittleLogFolderSelection;
+}

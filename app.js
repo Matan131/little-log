@@ -16,6 +16,8 @@
   const defaults = {clientId:'',folderName:'Little Log Baby Data',caregiver:''};
   let settings = {...defaults, ...readJson(localStorage.getItem(SETTINGS_KEY), {})};
   let db, token = null, tokenClient = null, folderId = null, syncBusy = false, lastSync = null, toastTimer, tokenWaiters = [];
+  let folderEnsurePromise = null;
+  let folderEnsureName = '';
   let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
   let events = [];
   let feedSession = null;
@@ -49,7 +51,18 @@
     if (card) card.classList.toggle('hidden', !title && !detail && !state);
   }
   function setSettingsMessage(msg) { const el = $('settingsMessage'); if (el) el.textContent = msg; }
-  function saveSettings() { localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings)); }
+  function saveSettings() {
+    const previousSync = readJson(localStorage.getItem(SYNC_KEY), null);
+    const currentName = (settings.folderName || defaults.folderName || '').trim();
+    const previousFolderName = (previousSync?.folderName || '').trim();
+
+    if (previousSync?.folderId && previousFolderName && previousFolderName !== currentName) {
+      localStorage.removeItem(SYNC_KEY);
+      folderId = null;
+    }
+
+    localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings));
+  }
   function readStoredAuth() { return readJson(localStorage.getItem(TOKEN_KEY), null); }
   function previouslyGranted() { return !!readStoredAuth()?.granted; }
   function persistToken(resp) {
@@ -259,7 +272,8 @@
 
   function render() {
     events=events.filter(e=>!e.deleted).sort((a,b)=>new Date(b.start)-new Date(a.start));
-    $('todayDate').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date());
+    if ($('todayLabel')) $('todayLabel').textContent = 'LAST FEED';
+    $('todayDate').textContent = window.LittleLogFolderSelection?.buildMainScreenSummary?.(events) || new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date());
     renderNextFeedBanner();
     const todays=events.filter(e=>isToday(e.start));
     const feeds=todays.filter(e=>e.type==='feeding').length;
@@ -313,32 +327,59 @@
     return response.json();
   }
   async function ensureFolder(showMessage=true) {
-    const name=settings.folderName.trim()||defaults.folderName;
-    const stored = readJson(localStorage.getItem(SYNC_KEY), null);
-    if (stored?.folderId) {
-      try {
-        const meta = await driveFetch(`files/${stored.folderId}?fields=id,name,trashed,shared`);
-        if (meta?.id && !meta.trashed) {
-          folderId = stored.folderId;
-          localStorage.setItem(SYNC_KEY, JSON.stringify({ folderId, folderName: name }));
-          if (showMessage) setSettingsMessage(`Using shared folder “${name}”.`);
-          return folderId;
+    const name = window.LittleLogFolderSelection?.getRequestedFolderName?.(settings, defaults) || settings.folderName.trim() || defaults.folderName;
+
+    if (folderEnsurePromise && folderEnsureName === name) {
+      return folderEnsurePromise;
+    }
+
+    folderEnsureName = name;
+    folderEnsurePromise = (async () => {
+      const stored = readJson(localStorage.getItem(SYNC_KEY), null);
+
+      if (stored?.folderId && !window.LittleLogFolderSelection?.shouldReuseStoredFolderId?.({ settings, defaults, syncMeta: stored })) {
+        console.warn('Ignoring stale saved Drive folder because the configured folder name changed.');
+        localStorage.removeItem(SYNC_KEY);
+        folderId = null;
+      }
+
+      const currentStored = readJson(localStorage.getItem(SYNC_KEY), null);
+      if (currentStored?.folderId && window.LittleLogFolderSelection?.shouldReuseStoredFolderId?.({ settings, defaults, syncMeta: currentStored })) {
+        try {
+          const meta = await driveFetch(`files/${currentStored.folderId}?fields=id,name,trashed,shared`);
+          if (meta?.id && !meta.trashed) {
+            folderId = currentStored.folderId;
+            localStorage.setItem(SYNC_KEY, JSON.stringify({ folderId, folderName: name }));
+            if (showMessage) setSettingsMessage(`Using shared folder “${name}”.`);
+            return folderId;
+          }
+        } catch (err) {
+          console.warn('Stored folder id was not usable:', err);
         }
-      } catch (err) {
-        console.warn('Stored folder id was not usable:', err);
+      }
+
+      const q=`name = '${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+      const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents,shared)`);
+      if(found.files?.length){
+        const preferred = found.files.find(f => f.shared) || found.files[0];
+        folderId=preferred.id;
+        localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));
+        if(showMessage)setSettingsMessage(`Found folder “${name}”. Make sure it is shared with your partner as Editor.`);
+        return folderId;
+      }
+
+      const created=await driveFetch('files?fields=id,name,mimeType',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder'})});
+      folderId=created.id;localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));if(showMessage)setSettingsMessage(`Created “${name}”. Now share this folder with your partner in Google Drive and give Editor access.`);return folderId;
+    })();
+
+    try {
+      return await folderEnsurePromise;
+    } finally {
+      if (folderEnsureName === name) {
+        folderEnsurePromise = null;
+        folderEnsureName = '';
       }
     }
-    const q=`name = '${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-    const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents,shared)`);
-    if(found.files?.length){
-      const preferred = found.files.find(f => f.shared) || found.files[0];
-      folderId=preferred.id;
-      localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));
-      if(showMessage)setSettingsMessage(`Found folder “${name}”. Make sure it is shared with your partner as Editor.`);
-      return folderId;
-    }
-    const created=await driveFetch('files?fields=id,name,mimeType',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder'})});
-    folderId=created.id;localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));if(showMessage)setSettingsMessage(`Created “${name}”. Now share this folder with your partner in Google Drive and give Editor access.`);return folderId;
   }
   async function listDriveEvents() {
     const all=[];let pageToken='';
@@ -790,7 +831,8 @@
       restoreFeedSession();
       render();
       wireEvents();
-      if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
+      const isLocalDev = ['localhost','127.0.0.1','[::1]'].includes(location.hostname);
+      if('serviceWorker' in navigator && location.protocol.startsWith('http') && !isLocalDev) navigator.serviceWorker.register('./sw.js').catch(console.warn);
       if(settings.clientId){
         if(token){ setStatus('Connected','Restored your saved Drive session.','good'); }
         else if(previouslyGranted()){ setStatus('Restoring Drive…','Checking the saved sign-in again.'); }
