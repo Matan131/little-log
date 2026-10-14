@@ -51,6 +51,32 @@
     }));
     updateConnectUi();
   }
+  async function restoreDriveSessionSilently() {
+    if (!settings.clientId || !previouslyGranted()) return false;
+    if (applyStoredToken()) {
+      setStatus('Connected','Restored your saved Drive session.','good');
+      await syncNow();
+      return true;
+    }
+    const ready = await whenGoogleReady(15000);
+    if (!ready || !window.google?.accounts?.oauth2) return false;
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: settings.clientId,
+      scope: 'https://www.googleapis.com/auth/drive',
+      callback: async (resp) => {
+        if (resp.error) {
+          clearAccessTokenKeepGrant();
+          setStatus('Not connected', 'Tap Connect Drive to sign in again.', 'pending');
+          return;
+        }
+        persistToken(resp);
+        try { await ensureFolder(false); await syncNow(); }
+        catch (err) { console.error(err); setStatus('Drive error', err.message, 'pending'); }
+      }
+    });
+    tokenClient.requestAccessToken({ prompt: 'none' });
+    return true;
+  }
   function clearAccessTokenKeepGrant() {
     token = null;
     localStorage.setItem(TOKEN_KEY, JSON.stringify({ granted: true, expires_at: 0 }));
@@ -204,12 +230,19 @@
     if(!window.google?.accounts?.oauth2){showToast('Google sign-in library is still loading. Try again in a moment.');return false;}
     tokenClient=google.accounts.oauth2.initTokenClient({client_id:settings.clientId,scope:'https://www.googleapis.com/auth/drive',callback:async(resp)=>{
       if(resp.error){setStatus('Connection failed',resp.error);showToast('Google authorization failed.');return;}
-      token=resp.access_token;
+      persistToken(resp);
       try{await ensureFolder(false);await syncNow();}catch(e){setStatus('Drive error',e.message);showToast(e.message);}
     }});
     return true;
   }
-  function connect() { if(startGoogleClient())tokenClient.requestAccessToken({prompt:token?'':'consent'}); }
+  function connect() {
+    if (!startGoogleClient()) return;
+    if (previouslyGranted() && !token) {
+      tokenClient.requestAccessToken({ prompt: 'none' });
+      return;
+    }
+    tokenClient.requestAccessToken({ prompt: token ? 'consent' : 'consent' });
+  }
   async function driveFetch(path, options={}) {
     if(!token)throw new Error('Connect Google Drive first.');
     const response=await fetch(`https://www.googleapis.com/drive/v3/${path}`,{...options,headers:{Authorization:`Bearer ${token}`,...(options.headers||{})}});
@@ -667,7 +700,23 @@
     document.addEventListener('visibilitychange',()=>{if(!document.hidden&&token)syncNow();});
   }
   async function init() {
-    try{db=await openDb();events=await allLocal();restoreFeedSession();render();wireEvents();if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);if(settings.clientId)setStatus('Ready to connect','Tap Connect Drive to load the shared folder.');setInterval(()=>{if(token&&!document.hidden)syncNow();},45000);}catch(e){console.error(e);setStatus('Local storage unavailable',e.message,'pending');}
+    try{
+      restoreFolderId();
+      applyStoredToken();
+      db=await openDb();
+      events=await allLocal();
+      restoreFeedSession();
+      render();
+      wireEvents();
+      if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
+      if(settings.clientId){
+        if(token){ setStatus('Connected','Restored your saved Drive session.','good'); }
+        else if(previouslyGranted()){ setStatus('Ready to connect','Restoring Google Drive session…'); }
+        else { setStatus('Ready to connect','Tap Connect Drive to load the shared folder.'); }
+      }
+      if (settings.clientId && previouslyGranted()) restoreDriveSessionSilently();
+      setInterval(()=>{if(token&&!document.hidden)syncNow();},45000);
+    }catch(e){console.error(e);setStatus('Local storage unavailable',e.message,'pending');}
   }
   init();
 })();
