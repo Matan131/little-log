@@ -29,9 +29,9 @@
     </section>
 
     <section class="quick-grid" aria-label="Log an activity">
-      <button class="quick" data-type="feeding"><span class="emoji">🍼</span><strong>Feeding</strong><small>Breast, bottle, pump</small></button>
+      <button class="quick" data-type="feeding"><span class="emoji">🍼</span><strong>Feeding</strong><small>Time each breast</small></button>
       <button class="quick" data-type="sleep"><span class="emoji">🌙</span><strong>Sleep</strong><small>Nap or night sleep</small></button>
-      <button class="quick" data-type="diaper"><span class="emoji">🧷</span><strong>Diaper</strong><small>Wet, dirty, both</small></button>
+      <button class="quick" data-type="diaper"><span class="emoji">🧷</span><strong>Diaper</strong><small>Wet, dry, dirty</small></button>
       <button class="quick" data-type="solids"><span class="emoji">🥣</span><strong>Solids</strong><small>Food and amount</small></button>
       <button class="quick" data-type="pumping"><span class="emoji">💧</span><strong>Pumping</strong><small>Duration and volume</small></button>
       <button class="quick" data-type="health"><span class="emoji">🩺</span><strong>Health</strong><small>Medicine, temperature</small></button>
@@ -39,6 +39,22 @@
       <button class="quick" data-type="milestone"><span class="emoji">⭐</span><strong>Milestone</strong><small>Firsts and development</small></button>
       <button class="quick" data-type="tummy"><span class="emoji">🐣</span><strong>Tummy time</strong><small>Practice and play</small></button>
       <button class="quick" data-type="note"><span class="emoji">📝</span><strong>Note / routine</strong><small>Bath, appointment, etc.</small></button>
+    </section>
+
+    <button id="liveFeedBar" class="live-bar" type="button" hidden>
+      <span>Breastfeeding in progress</span>
+      <strong id="liveFeedTimes">L 00:00 · R 00:00</strong>
+    </button>
+
+    <section class="panel last24-panel">
+      <div class="section-head"><div><div class="eyebrow">LAST 24 HOURS</div><h2>Feedings</h2></div><div class="stat-pill" id="feeds24Total">0</div></div>
+      <div id="feeds24" class="last24-list"><div class="empty">No feeds in the last 24 hours.</div></div>
+    </section>
+
+    <section class="panel last24-panel">
+      <div class="section-head"><div><div class="eyebrow">LAST 24 HOURS</div><h2>Diapers</h2></div><div class="stat-pill" id="diapers24Total">0</div></div>
+      <div class="pill-row" id="diapers24Summary"></div>
+      <div id="diapers24" class="last24-list"><div class="empty">No diapers in the last 24 hours.</div></div>
     </section>
 
     <section class="panel">
@@ -57,14 +73,82 @@
     <form id="eventForm" method="dialog">
       <div class="dialog-head"><div><div class="eyebrow">ADD TO BABY'S LOG</div><h2 id="eventTitle">New activity</h2></div><button type="button" class="icon-btn" data-close="eventDialog" aria-label="Close">✕</button></div>
       <input type="hidden" id="eventId">
-      <label>Activity type<select id="eventType" required><option value="feeding">Feeding</option><option value="sleep">Sleep</option><option value="diaper">Diaper</option><option value="solids">Solids</option><option value="pumping">Pumping</option><option value="health">Health / medication / vaccine</option><option value="growth">Growth measurement</option><option value="milestone">Milestone</option><option value="tummy">Tummy time / play</option><option value="note">Note / routine / appointment</option></select></label>
-      <div class="two-col"><label>Start / time<input id="eventStart" type="datetime-local" required></label><label>End (optional)<input id="eventEnd" type="datetime-local"></label></div>
-      <label>Details / subtype<input id="eventSubtype" placeholder="e.g. breastfeeding, left side, wet + dirty"></label>
-      <div class="two-col"><label>Amount / value<input id="eventAmount" placeholder="e.g. 90 ml, 4.2 kg"></label><label>Unit<input id="eventUnit" placeholder="ml, kg, cm, °C…"></label></div>
-      <label>Notes<textarea id="eventNotes" rows="3" placeholder="Anything to remember…"></textarea></label>
-      <div class="two-col"><label>Recorded by<input id="eventCaregiver" placeholder="Parent 1 / Parent 2"></label><label>Timer duration (minutes)<input id="eventDuration" type="number" min="0" step="1" placeholder="Optional"></label></div>
-      <div class="form-actions"><button type="button" class="secondary" data-close="eventDialog">Cancel</button><button class="primary" type="submit">Save activity</button></div>
-      <p class="hint">The entry is saved locally first and uploaded to Drive when connected. Keep the app open until the sync status confirms upload.</p>
+      <label id="eventTypeWrap">Activity type<select id="eventType" required><option value="feeding">Feeding</option><option value="sleep">Sleep</option><option value="diaper">Diaper</option><option value="solids">Solids</option><option value="pumping">Pumping</option><option value="health">Health / medication / vaccine</option><option value="growth">Growth measurement</option><option value="milestone">Milestone</option><option value="tummy">Tummy time / play</option><option value="note">Note / routine / appointment</option></select></label>
+
+      <div id="fieldsFeeding" hidden>
+        <div class="seg" role="tablist" aria-label="Feed type">
+          <button type="button" class="seg-btn selected" data-feed-kind="breast">Breast</button>
+          <button type="button" class="seg-btn" data-feed-kind="bottle">Bottle</button>
+        </div>
+        <div id="breastPanel">
+          <div class="seg subtle">
+            <button type="button" class="seg-btn selected" data-breast-when="now">Time it now</button>
+            <button type="button" class="seg-btn" data-breast-when="past">Log earlier</button>
+          </div>
+          <p class="hint" id="feedAutoHint">Start a side to time. Saved automatically every 15 seconds, and when you tap Save.</p>
+          <div class="timer-grid">
+            <div class="timer-card" id="leftCard">
+              <div class="timer-side">Left</div>
+              <div class="timer-display" id="leftDisplay">00:00</div>
+              <button type="button" class="primary timer-toggle" id="leftToggle">Start</button>
+              <div class="mmss">
+                <label>Min<input id="leftMin" type="number" min="0" max="240" inputmode="numeric" value="0"></label>
+                <span>:</span>
+                <label>Sec<input id="leftSec" type="number" min="0" max="59" inputmode="numeric" value="0"></label>
+              </div>
+            </div>
+            <div class="timer-card" id="rightCard">
+              <div class="timer-side">Right</div>
+              <div class="timer-display" id="rightDisplay">00:00</div>
+              <button type="button" class="primary timer-toggle" id="rightToggle">Start</button>
+              <div class="mmss">
+                <label>Min<input id="rightMin" type="number" min="0" max="240" inputmode="numeric" value="0"></label>
+                <span>:</span>
+                <label>Sec<input id="rightSec" type="number" min="0" max="59" inputmode="numeric" value="0"></label>
+              </div>
+            </div>
+          </div>
+          <label>Feed started<input id="feedStart" type="datetime-local"></label>
+        </div>
+        <div id="bottlePanel" hidden>
+          <label>When<input id="bottleStart" type="datetime-local"></label>
+          <div class="two-col">
+            <label>Amount<input id="bottleAmount" type="number" min="0" step="1" placeholder="90"></label>
+            <label>Unit<input id="bottleUnit" value="ml"></label>
+          </div>
+        </div>
+        <label>Notes (optional)<textarea id="feedNotes" rows="2" placeholder="Latch, spit-up, anything useful…"></textarea></label>
+        <div class="last24-embed">
+          <div class="section-head tight"><div class="eyebrow">LAST 24 HOURS</div><div class="stat-pill" id="dialogFeeds24Total">0</div></div>
+          <div id="dialogFeeds24" class="last24-list compact"></div>
+        </div>
+      </div>
+
+      <div id="fieldsDiaper" hidden>
+        <p class="hint">Choose wet, dirty, or a dry check. Wet and dirty can both be on.</p>
+        <div class="choice-grid" id="diaperChoices">
+          <button type="button" class="choice" data-diaper="wet" aria-pressed="false"><span>💧</span>Wet</button>
+          <button type="button" class="choice" data-diaper="dirty" aria-pressed="false"><span>💩</span>Dirty</button>
+          <button type="button" class="choice" data-diaper="dry" aria-pressed="false"><span>✨</span>Dry</button>
+        </div>
+        <label>When<input id="diaperStart" type="datetime-local"></label>
+        <label>Notes (optional)<textarea id="diaperNotes" rows="2" placeholder="Rash, blowout…"></textarea></label>
+        <div class="last24-embed">
+          <div class="section-head tight"><div class="eyebrow">LAST 24 HOURS</div><div class="stat-pill" id="dialogDiapers24Total">0</div></div>
+          <div class="pill-row" id="dialogDiapers24Summary"></div>
+          <div id="dialogDiapers24" class="last24-list compact"></div>
+        </div>
+      </div>
+
+      <div id="fieldsGeneric">
+        <div class="two-col"><label>Start / time<input id="eventStart" type="datetime-local"></label><label>End (optional)<input id="eventEnd" type="datetime-local"></label></div>
+        <label>Details / subtype<input id="eventSubtype" placeholder="e.g. nap, vaccine, first smile"></label>
+        <div class="two-col"><label>Amount / value<input id="eventAmount" placeholder="e.g. 4.2 kg"></label><label>Unit<input id="eventUnit" placeholder="kg, cm, °C…"></label></div>
+        <label>Notes<textarea id="eventNotes" rows="3" placeholder="Anything to remember…"></textarea></label>
+        <div class="two-col"><label>Recorded by<input id="eventCaregiver" placeholder="Parent 1 / Parent 2"></label><label>Timer duration (minutes)<input id="eventDuration" type="number" min="0" step="1" placeholder="Optional"></label></div>
+      </div>
+      <div class="form-actions"><button type="button" class="secondary" data-close="eventDialog">Cancel</button><button class="primary" type="submit" id="eventSaveBtn">Save activity</button></div>
+      <p class="hint">The entry is saved locally first and uploaded to Drive when connected.</p>
     </form>
   </dialog>
 
