@@ -74,6 +74,22 @@ export function getDriveSyncHealth({ localEvents = [], remoteEvents = [] } = {})
   };
 }
 
+export function pickFolderCandidate(matches = [], requestedName = '') {
+  const list = (matches || []).filter(Boolean);
+  if (!list.length) return null;
+  if (list.length === 1) return list[0];
+
+  const shared = list.filter((folder) => folder.shared);
+  if (shared.length === 1) return shared[0];
+  if (shared.length > 1) return { ambiguous: true, candidates: shared.map((folder) => ({ id: folder.id, name: folder.name, shared: folder.shared })) };
+
+  const exactName = list.filter((folder) => String(folder.name || '').trim() === String(requestedName || '').trim());
+  if (exactName.length === 1) return exactName[0];
+
+  const newest = [...list].sort((a, b) => new Date(b.createdTime || 0) - new Date(a.createdTime || 0))[0];
+  return newest || null;
+}
+
 export const LittleLogFolderSelection = {
   getRequestedFolderName,
   normalizeFolderName,
@@ -84,6 +100,7 @@ export const LittleLogFolderSelection = {
   getRecommendedNextSide,
   buildMainScreenSummary,
   getDriveSyncHealth,
+  pickFolderCandidate,
 };
 
 if (typeof window !== 'undefined') {

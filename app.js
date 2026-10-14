@@ -359,9 +359,16 @@
       }
 
       const q=`name = '${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-      const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents,shared)`);
+      const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents,shared,createdTime)`);
       if(found.files?.length){
-        const preferred = found.files.find(f => f.shared) || found.files[0];
+        const preferred = window.LittleLogFolderSelection?.pickFolderCandidate?.(found.files, name);
+        if (preferred && preferred.ambiguous) {
+          const folderList = preferred.candidates.map((candidate) => `${candidate.name} (${candidate.id})`).join(', ');
+          throw new Error(`Multiple Google Drive folders match “${name}”: ${folderList}. Rename or delete the duplicate folders so there is only one exact folder for this app. Then reconnect Drive.`);
+        }
+        if (!preferred) {
+          throw new Error(`Multiple Google Drive folders named “${name}” were found and none is unambiguous. Open Google Drive and remove the duplicate folders or rename them so only one exact folder remains. Matching IDs: ${found.files.map((folder) => `${folder.name} (${folder.id})`).join(', ')}`);
+        }
         folderId=preferred.id;
         localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));
         if(showMessage)setSettingsMessage(`Found folder “${name}”. Make sure it is shared with your partner as Editor.`);
@@ -416,7 +423,9 @@
       const finalRemote=await listDriveEvents();
       const syncHealth = window.LittleLogFolderSelection?.getDriveSyncHealth?.({ localEvents: finalLocal, remoteEvents: finalRemote });
       if (syncHealth?.hasUploadProblem) {
-        throw new Error(`Drive folder “${settings.folderName}” is still empty after sync. Check that you are signed into the correct Google account and that the folder is shared with Editor access.`);
+        const folderMeta = readJson(localStorage.getItem(SYNC_KEY), null);
+        const folderIdHint = folderMeta?.folderId ? ` Folder ID in use: ${folderMeta.folderId}.` : '';
+        throw new Error(`Drive folder “${settings.folderName}” is still empty after sync. This usually means the app is using the wrong Google account or the wrong shared folder. Check that you are signed into the Google account that owns this folder and that the folder has Editor access for both parents.${folderIdHint} If you have duplicate folders with the same name, rename or delete the extras in Google Drive and reconnect.`);
       }
       events=finalLocal;lastSync=new Date();setStatus('Synced','Shared Drive data is up to date · '+formatDateTime(lastSync,true),'good');render();
     } catch(err){console.error(err);setStatus('Sync needs attention',err.message,'pending');showToast(err.message);}

@@ -8,6 +8,7 @@ import {
   getLast24WetDiapers,
   getRecommendedNextSide,
   getDriveSyncHealth,
+  pickFolderCandidate,
 } from '../sync-folder.mjs';
 
 test('requested folder name trims whitespace and falls back to default', () => {
@@ -80,4 +81,16 @@ test('sync health flags a false-positive success when local events remain pendin
 
   assert.equal(health.pendingCount, 2);
   assert.equal(health.hasUploadProblem, true);
+});
+
+test('ambiguous duplicate folder names are rejected instead of silently picking the first match', () => {
+  const matches = [
+    { id: 'a', name: 'Little Log Baby Data', shared: true, createdTime: '2024-01-01T00:00:00Z' },
+    { id: 'b', name: 'Little Log Baby Data', shared: true, createdTime: '2024-01-02T00:00:00Z' }
+  ];
+
+  const candidate = pickFolderCandidate(matches, 'Little Log Baby Data');
+  assert.equal(candidate.ambiguous, true);
+  assert.equal(candidate.candidates.length, 2);
+  assert.match(`${candidate.candidates[0].id},${candidate.candidates[1].id}`, /a|b/);
 });
