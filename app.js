@@ -412,7 +412,13 @@
         try {if(remoteById.has(l.id)){const remoteEntry=remoteById.get(l.id);await updateDriveEvent(l,remoteEntry._driveId);await putLocal({...l,driveId:remoteEntry._driveId,syncState:'synced'});}else{const created=await createDriveEvent(l);await putLocal({...l,driveId:created.id,syncState:'synced'});}}
         catch(err){console.warn('Pending event remains local',l.id,err);}
       }}
-      events=await allLocal();lastSync=new Date();setStatus('Synced','Shared Drive data is up to date · '+formatDateTime(lastSync,true),'good');render();
+      const finalLocal=await allLocal();
+      const finalRemote=await listDriveEvents();
+      const syncHealth = window.LittleLogFolderSelection?.getDriveSyncHealth?.({ localEvents: finalLocal, remoteEvents: finalRemote });
+      if (syncHealth?.hasUploadProblem) {
+        throw new Error(`Drive folder “${settings.folderName}” is still empty after sync. Check that you are signed into the correct Google account and that the folder is shared with Editor access.`);
+      }
+      events=finalLocal;lastSync=new Date();setStatus('Synced','Shared Drive data is up to date · '+formatDateTime(lastSync,true),'good');render();
     } catch(err){console.error(err);setStatus('Sync needs attention',err.message,'pending');showToast(err.message);}
     finally{syncBusy=false;$('syncBtn').disabled=false;}
   }

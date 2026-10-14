@@ -62,6 +62,18 @@ export function buildMainScreenSummary(events = []) {
   return `${timeSince} since last feed • ${sideText} • ${wetCount} wet in 24h`;
 }
 
+export function getDriveSyncHealth({ localEvents = [], remoteEvents = [] } = {}) {
+  const remoteIds = new Set((remoteEvents || []).filter((event) => event && event.id).map((event) => event.id));
+  const pending = (localEvents || []).filter((event) => !event?.deleted && (event.syncState === 'pending' || !remoteIds.has(event.id)));
+
+  return {
+    remoteCount: (remoteEvents || []).length,
+    pendingCount: pending.length,
+    hasUploadProblem: (remoteEvents || []).length === 0 && pending.length > 0,
+    pendingIds: pending.map((event) => event.id),
+  };
+}
+
 export const LittleLogFolderSelection = {
   getRequestedFolderName,
   normalizeFolderName,
@@ -71,6 +83,7 @@ export const LittleLogFolderSelection = {
   getLast24WetDiapers,
   getRecommendedNextSide,
   buildMainScreenSummary,
+  getDriveSyncHealth,
 };
 
 if (typeof window !== 'undefined') {

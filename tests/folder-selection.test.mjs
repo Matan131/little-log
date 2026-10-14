@@ -7,6 +7,7 @@ import {
   buildMainScreenSummary,
   getLast24WetDiapers,
   getRecommendedNextSide,
+  getDriveSyncHealth,
 } from '../sync-folder.mjs';
 
 test('requested folder name trims whitespace and falls back to default', () => {
@@ -67,4 +68,16 @@ test('hero summary tells you how long since the last feed, which side is next, a
   assert.match(buildMainScreenSummary(events), /2h 15m since last feed/i);
   assert.match(buildMainScreenSummary(events), /left side next/i);
   assert.match(buildMainScreenSummary(events), /2 wet in 24h/i);
+});
+
+test('sync health flags a false-positive success when local events remain pending but the drive folder is empty', () => {
+  const localEvents = [
+    { id: 'evt-1', type: 'feeding', syncState: 'pending', deleted: false },
+    { id: 'evt-2', type: 'diaper', syncState: 'pending', deleted: false }
+  ];
+
+  const health = getDriveSyncHealth({ localEvents, remoteEvents: [] });
+
+  assert.equal(health.pendingCount, 2);
+  assert.equal(health.hasUploadProblem, true);
 });
