@@ -15,12 +15,15 @@
 <body>
   <header class="topbar">
     <div><div class="eyebrow">YOUR FAMILY'S BABY LOG</div><h1>Little Log</h1></div>
-    <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+    <div class="topbar-actions">
+      <button id="connectBtn" class="primary small">Connect Drive</button>
+      <button id="themeBtn" class="icon-btn" aria-label="Toggle theme" title="Toggle theme">☀</button>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings" title="Settings">⚙</button>
+    </div>
   </header>
   <main>
-    <section class="status-card" aria-live="polite">
+    <section class="status-card hidden" id="statusCard" aria-live="polite">
       <div><span class="status-dot" id="statusDot"></span><strong id="syncTitle">Not connected</strong><p id="syncDetail">Set up Google Drive to share records between phones.</p></div>
-      <button id="connectBtn" class="primary small">Connect Drive</button>
     </section>
 
     <section class="hero-row">
@@ -28,18 +31,23 @@
       <button id="syncBtn" class="secondary" title="Sync now">↻ Sync</button>
     </section>
 
-    <section class="quick-grid" aria-label="Log an activity">
+    <div id="nextFeedBanner" class="info-banner">No feeding logged yet.</div>
+
+    <section class="quick-grid quick-grid-primary" aria-label="Log an activity">
       <button class="quick" data-type="feeding"><span class="emoji">🍼</span><strong>Feeding</strong><small>Time each breast</small></button>
-      <button class="quick" data-type="sleep"><span class="emoji">🌙</span><strong>Sleep</strong><small>Nap or night sleep</small></button>
-      <button class="quick" data-type="diaper"><span class="emoji">🧷</span><strong>Diaper</strong><small>Wet, dry, dirty</small></button>
-      <button class="quick" data-type="solids"><span class="emoji">🥣</span><strong>Solids</strong><small>Food and amount</small></button>
-      <button class="quick" data-type="pumping"><span class="emoji">💧</span><strong>Pumping</strong><small>Duration and volume</small></button>
-      <button class="quick" data-type="health"><span class="emoji">🩺</span><strong>Health</strong><small>Medicine, temperature</small></button>
-      <button class="quick" data-type="growth"><span class="emoji">📏</span><strong>Growth</strong><small>Weight and length</small></button>
-      <button class="quick" data-type="milestone"><span class="emoji">⭐</span><strong>Milestone</strong><small>Firsts and development</small></button>
-      <button class="quick" data-type="tummy"><span class="emoji">🐣</span><strong>Tummy time</strong><small>Practice and play</small></button>
-      <button class="quick" data-type="note"><span class="emoji">📝</span><strong>Note / routine</strong><small>Bath, appointment, etc.</small></button>
+      <button class="quick" data-type="diaper"><span class="emoji">🧷</span><strong>Diaper</strong><small>Wet / dry / dirty</small></button>
+      <button class="quick" data-type="sleep"><span class="emoji">🌙</span><strong>Sleep</strong><small>Nap or night</small></button>
     </section>
+
+    <div class="secondary-actions" aria-label="More activity types">
+      <button class="mini-action" data-type="solids"><span>🥣</span> Solids</button>
+      <button class="mini-action" data-type="pumping"><span>💧</span> Pumping</button>
+      <button class="mini-action" data-type="health"><span>🩺</span> Health</button>
+      <button class="mini-action" data-type="growth"><span>📏</span> Growth</button>
+      <button class="mini-action" data-type="milestone"><span>⭐</span> Milestone</button>
+      <button class="mini-action" data-type="tummy"><span>🐣</span> Play</button>
+      <button class="mini-action" data-type="note"><span>📝</span> Note</button>
+    </div>
 
     <button id="liveFeedBar" class="live-bar" type="button" hidden>
       <span>Breastfeeding in progress</span>

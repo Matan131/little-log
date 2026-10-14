@@ -8,6 +8,7 @@
   const SYNC_KEY = 'little-log-sync-v1';
   const TOKEN_KEY = 'little-log-token-v1';
   const FEED_SESSION_KEY = 'little-log-feed-session-v1';
+  const THEME_KEY = 'little-log-theme-v1';
   const AUTO_SAVE_MS = 15000;
   const TYPES = {
     feeding:{label:'Feeding',icon:'🍼'},sleep:{label:'Sleep',icon:'🌙'},diaper:{label:'Diaper',icon:'🧷'},solids:{label:'Solids',icon:'🥣'},pumping:{label:'Pumping',icon:'💧'},health:{label:'Health',icon:'🩺'},growth:{label:'Growth',icon:'📏'},milestone:{label:'Milestone',icon:'⭐'},tummy:{label:'Tummy time / play',icon:'🐣'},note:{label:'Note / routine',icon:'📝'}
@@ -15,6 +16,7 @@
   const defaults = {clientId:'',folderName:'Little Log Baby Data',caregiver:''};
   let settings = {...defaults, ...readJson(localStorage.getItem(SETTINGS_KEY), {})};
   let db, token = null, tokenClient = null, folderId = null, syncBusy = false, lastSync = null, toastTimer, tokenWaiters = [];
+  let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
   let events = [];
   let feedSession = null;
   let feedKind = 'breast';
@@ -36,8 +38,17 @@
   function last24Start() { return Date.now() - 86400000; }
   function inLast24h(iso) { return iso && new Date(iso).getTime() >= last24Start(); }
   function showToast(msg) { const el=$('toast');el.textContent=msg;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),2800); }
-  function setStatus(title, detail, state='') { $('syncTitle').textContent=title;$('syncDetail').textContent=detail;$('statusDot').className='status-dot'+(state?' '+state:''); }
-  function setSettingsMessage(msg) { $('settingsMessage').textContent=msg; }
+  function setStatus(title, detail, state='') {
+    const titleEl = $('syncTitle');
+    const detailEl = $('syncDetail');
+    const dotEl = $('statusDot');
+    const card = $('statusCard');
+    if (titleEl) titleEl.textContent = title;
+    if (detailEl) detailEl.textContent = detail;
+    if (dotEl) dotEl.className = 'status-dot' + (state ? ' ' + state : '');
+    if (card) card.classList.toggle('hidden', !title && !detail && !state);
+  }
+  function setSettingsMessage(msg) { const el = $('settingsMessage'); if (el) el.textContent = msg; }
   function saveSettings() { localStorage.setItem(SETTINGS_KEY,JSON.stringify(settings)); }
   function readStoredAuth() { return readJson(localStorage.getItem(TOKEN_KEY), null); }
   function previouslyGranted() { return !!readStoredAuth()?.granted; }
@@ -123,6 +134,55 @@
     const s = whole % 60;
     return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
+  function formatMinutesSeconds(ms) {
+    const totalSeconds = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}m ${secs}s`;
+  }
+  function relativeTimeText(iso) {
+    if (!iso) return 'No feeding logged yet';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    if (diffMs <= 0) return 'just now';
+    const totalMinutes = Math.round(diffMs / 60000);
+    if (totalMinutes < 60) return `${totalMinutes} min ago`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours < 24) return minutes ? `${hours}h ${minutes}m ago` : `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+  function getRecommendedBreastSide() {
+    const latest = [...events].filter(e => e.type === 'feeding' && e.subtype === 'breast' && !e.deleted).sort((a, b) => new Date(b.start) - new Date(a.start))[0];
+    if (!latest) return { text: 'No feeding logged yet', side: null };
+    const left = Number(latest.leftSeconds || 0);
+    const right = Number(latest.rightSeconds || 0);
+    const total = left + right;
+    if (!total) return { text: `${relativeTimeText(latest.start)} · no feed time logged`, side: null };
+    let side = 'right';
+    if (left === 0 && right > 0) side = 'left';
+    else if (right === 0 && left > 0) side = 'right';
+    else if (left !== right) side = left > right ? 'right' : 'left';
+    const sideLabel = side === 'left' ? 'left' : 'right';
+    return {
+      text: `${relativeTimeText(latest.start)} · ${sideLabel} side next`,
+      side: sideLabel
+    };
+  }
+  function renderNextFeedBanner() {
+    const el = $('nextFeedBanner');
+    if (!el) return;
+    const summary = getRecommendedBreastSide();
+    el.textContent = summary.text;
+    el.classList.toggle('warning', !summary.side);
+  }
+  function applyTheme(themeName) {
+    currentTheme = themeName === 'light' ? 'light' : 'dark';
+    document.body.classList.toggle('light', currentTheme === 'light');
+    localStorage.setItem(THEME_KEY, currentTheme);
+    const themeBtn = $('themeBtn');
+    if (themeBtn) themeBtn.textContent = currentTheme === 'light' ? '☾' : '☀';
+  }
   function secondsToMs(sec) { return Math.max(0, Math.round(Number(sec)||0) * 1000); }
   function emptySide(ms=0) { return { acc: ms, running: false, startedAt: null }; }
   function sideElapsed(side) {
@@ -144,9 +204,9 @@
       return [e.amount, e.unit].filter(Boolean).join(' ') || 'Bottle';
     }
     const parts = [];
-    if (e.leftSeconds) parts.push(`L ${formatDuration(e.leftSeconds*1000)}`);
-    if (e.rightSeconds) parts.push(`R ${formatDuration(e.rightSeconds*1000)}`);
-    if (!parts.length && e.durationSeconds) parts.push(formatDuration(e.durationSeconds*1000));
+    if (e.leftSeconds) parts.push(`L ${formatMinutesSeconds(e.leftSeconds * 1000)}`);
+    if (e.rightSeconds) parts.push(`R ${formatMinutesSeconds(e.rightSeconds * 1000)}`);
+    if (!parts.length && e.durationSeconds) parts.push(formatDuration(e.durationSeconds * 1000));
     else if (!parts.length && e.durationMinutes) parts.push(`${e.durationMinutes} min`);
     if (e.inProgress) parts.push('timing');
     return parts.join(' · ') || 'Breastfeed';
@@ -200,6 +260,7 @@
   function render() {
     events=events.filter(e=>!e.deleted).sort((a,b)=>new Date(b.start)-new Date(a.start));
     $('todayDate').textContent=new Intl.DateTimeFormat(undefined,{weekday:'long',month:'long',day:'numeric'}).format(new Date());
+    renderNextFeedBanner();
     const todays=events.filter(e=>isToday(e.start));
     const feeds=todays.filter(e=>e.type==='feeding').length;
     const diapers=todays.filter(e=>e.type==='diaper').length;
@@ -253,9 +314,29 @@
   }
   async function ensureFolder(showMessage=true) {
     const name=settings.folderName.trim()||defaults.folderName;
+    const stored = readJson(localStorage.getItem(SYNC_KEY), null);
+    if (stored?.folderId) {
+      try {
+        const meta = await driveFetch(`files/${stored.folderId}?fields=id,name,trashed,shared`);
+        if (meta?.id && !meta.trashed) {
+          folderId = stored.folderId;
+          localStorage.setItem(SYNC_KEY, JSON.stringify({ folderId, folderName: name }));
+          if (showMessage) setSettingsMessage(`Using shared folder “${name}”.`);
+          return folderId;
+        }
+      } catch (err) {
+        console.warn('Stored folder id was not usable:', err);
+      }
+    }
     const q=`name = '${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
-    const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents)`);
-    if(found.files?.length){folderId=found.files[0].id;localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));if(showMessage)setSettingsMessage(`Found folder “${name}”. Make sure it is shared with your partner as Editor.`);return folderId;}
+    const found=await driveFetch(`files?q=${encodeURIComponent(q)}&pageSize=100&fields=files(id,name,mimeType,webViewLink,parents,shared)`);
+    if(found.files?.length){
+      const preferred = found.files.find(f => f.shared) || found.files[0];
+      folderId=preferred.id;
+      localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));
+      if(showMessage)setSettingsMessage(`Found folder “${name}”. Make sure it is shared with your partner as Editor.`);
+      return folderId;
+    }
     const created=await driveFetch('files?fields=id,name,mimeType',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder'})});
     folderId=created.id;localStorage.setItem(SYNC_KEY,JSON.stringify({folderId,folderName:name}));if(showMessage)setSettingsMessage(`Created “${name}”. Now share this folder with your partner in Google Drive and give Editor access.`);return folderId;
   }
@@ -663,7 +744,7 @@
   }
 
   function wireEvents() {
-    $('connectBtn').addEventListener('click',connect);$('syncBtn').addEventListener('click',syncNow);$('settingsBtn').addEventListener('click',()=>{ $('clientIdInput').value=settings.clientId;$('folderNameInput').value=settings.folderName;$('caregiverInput').value=settings.caregiver;openDialog('settingsDialog');});
+    $('connectBtn').addEventListener('click',connect);$('syncBtn').addEventListener('click',syncNow);$('settingsBtn').addEventListener('click',()=>{ $('clientIdInput').value=settings.clientId;$('folderNameInput').value=settings.folderName;$('caregiverInput').value=settings.caregiver;openDialog('settingsDialog');});$('themeBtn').addEventListener('click',()=>applyTheme(currentTheme === 'dark' ? 'light' : 'dark'));
     document.querySelectorAll('[data-type]').forEach(b=>b.addEventListener('click',()=>openNew(b.dataset.type)));
     document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>{
       if (b.dataset.close === 'eventDialog') closeEventDialog();
@@ -701,6 +782,7 @@
   }
   async function init() {
     try{
+      applyTheme(currentTheme);
       restoreFolderId();
       applyStoredToken();
       db=await openDb();
@@ -711,7 +793,7 @@
       if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
       if(settings.clientId){
         if(token){ setStatus('Connected','Restored your saved Drive session.','good'); }
-        else if(previouslyGranted()){ setStatus('Ready to connect','Restoring Google Drive session…'); }
+        else if(previouslyGranted()){ setStatus('Restoring Drive…','Checking the saved sign-in again.'); }
         else { setStatus('Ready to connect','Tap Connect Drive to load the shared folder.'); }
       }
       if (settings.clientId && previouslyGranted()) restoreDriveSessionSilently();
