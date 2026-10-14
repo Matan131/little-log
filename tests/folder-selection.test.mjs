@@ -9,6 +9,7 @@ import {
   getRecommendedNextSide,
   getDriveSyncHealth,
   pickFolderCandidate,
+  addDriveScopeFlags,
 } from '../sync-folder.mjs';
 
 test('requested folder name trims whitespace and falls back to default', () => {
@@ -93,4 +94,12 @@ test('ambiguous duplicate folder names are rejected instead of silently picking 
   assert.equal(candidate.ambiguous, true);
   assert.equal(candidate.candidates.length, 2);
   assert.match(`${candidate.candidates[0].id},${candidate.candidates[1].id}`, /a|b/);
+});
+
+test('Drive queries include shared-drive flags so the app can see the actual folder instead of creating a duplicate', () => {
+  const withFlags = addDriveScopeFlags('files?q=name%20%3D%20%27Test%27');
+
+  assert.match(withFlags, /supportsAllDrives=true/i);
+  assert.match(withFlags, /includeItemsFromAllDrives=true/i);
+  assert.doesNotMatch(withFlags, /supportsAllDrives=true.*supportsAllDrives=true/);
 });

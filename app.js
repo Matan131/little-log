@@ -320,7 +320,8 @@
   }
   async function driveFetch(path, options={}) {
     if(!token)throw new Error('Connect Google Drive first.');
-    const response=await fetch(`https://www.googleapis.com/drive/v3/${path}`,{...options,headers:{Authorization:`Bearer ${token}`,...(options.headers||{})}});
+    const drivePath = window.LittleLogFolderSelection?.addDriveScopeFlags?.(path) ?? path;
+    const response=await fetch(`https://www.googleapis.com/drive/v3/${drivePath}`,{...options,headers:{Authorization:`Bearer ${token}`,...(options.headers||{})}});
     if(response.status===401){token=null;throw new Error('Google session expired. Tap Connect Drive to reconnect.');}
     if(!response.ok){let body='';try{body=(await response.json()).error?.message||'';}catch{}throw new Error(body||`Google Drive request failed (${response.status}).`);}
     if(response.status===204)return null;

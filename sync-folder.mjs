@@ -1,3 +1,16 @@
+export function addDriveScopeFlags(path = '') {
+  if (!path) {
+    return 'supportsAllDrives=true&includeItemsFromAllDrives=true';
+  }
+
+  if (path.includes('supportsAllDrives=') && path.includes('includeItemsFromAllDrives=')) {
+    return path;
+  }
+
+  const separator = path.includes('?') ? '&' : '?';
+  return `${path}${separator}supportsAllDrives=true&includeItemsFromAllDrives=true`;
+}
+
 export function getRequestedFolderName(settings = {}, defaults = {}) {
   const requested = (settings.folderName ?? defaults.folderName ?? '').trim();
   return requested || (defaults.folderName || 'Little Log Baby Data');
@@ -91,6 +104,7 @@ export function pickFolderCandidate(matches = [], requestedName = '') {
 }
 
 export const LittleLogFolderSelection = {
+  addDriveScopeFlags,
   getRequestedFolderName,
   normalizeFolderName,
   hasFolderNameMismatch,
